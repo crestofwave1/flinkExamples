@@ -88,7 +88,7 @@
               </filters>
               <transformers>
                 <transformer>
-                  <mainClass>quickstart.StreamingJob</mainClass>
+                  <mainClass>Streaming.kafka.Kafka010Example</mainClass>
                 </transformer>
               </transformers>
             </configuration>
@@ -109,9 +109,33 @@
         </dependency>
         <dependency>
           <groupId>org.apache.flink</groupId>
+          <artifactId>flink-core</artifactId>
+          <version>${flink.version}</version>
+          <scope>compile</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.flink</groupId>
+          <artifactId>flink-table_2.11</artifactId>
+          <version>${flink.version}</version>
+          <scope>compile</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.flink</groupId>
           <artifactId>flink-streaming-java_${scala.binary.version}</artifactId>
           <version>${flink.version}</version>
           <scope>compile</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.calcite</groupId>
+          <artifactId>calcite-core</artifactId>
+          <version>${calcite.version}</version>
+          <scope>compile</scope>
+          <exclusions>
+            <exclusion>
+              <artifactId>avatica-core</artifactId>
+              <groupId>org.apache.calcite.avatica</groupId>
+            </exclusion>
+          </exclusions>
         </dependency>
       </dependencies>
     </profile>
@@ -172,19 +196,20 @@
     </dependency>
     <dependency>
       <groupId>org.apache.flink</groupId>
+      <artifactId>flink-table_2.11</artifactId>
+      <version>1.6.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.flink</groupId>
       <artifactId>flink-runtime_2.11</artifactId>
       <version>1.6.0</version>
       <classifier>tests</classifier>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.flink</groupId>
-      <artifactId>flink-table_2.11</artifactId>
-      <version>1.6.0</version>
-      <scope>compile</scope>
-    </dependency>
   </dependencies>
   <properties>
+    <calcite.version>1.16.0</calcite.version>
     <java.version>1.8</java.version>
     <scala.binary.version>2.11</scala.binary.version>
     <flink.version>1.6.0</flink.version>

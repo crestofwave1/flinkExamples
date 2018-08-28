@@ -17,6 +17,8 @@
 
 package Streaming.kafka;
 
+import net.sf.json.JSONObject;
+
 /**
  * The event type used in the {@link Kafka010Example}.
  *
@@ -28,14 +30,14 @@ public class KafkaEvent {
 
 	private String word;
 	private int frequency;
-	private long timestamp;
+	private long timestamp1;
 
 	public KafkaEvent() {}
 
-	public KafkaEvent(String word, int frequency, long timestamp) {
+	public KafkaEvent(String word, int frequency, long timestamp1) {
 		this.word = word;
 		this.frequency = frequency;
-		this.timestamp = timestamp;
+		this.timestamp1 = timestamp1;
 	}
 
 	public String getWord() {
@@ -54,21 +56,21 @@ public class KafkaEvent {
 		this.frequency = frequency;
 	}
 
-	public long getTimestamp() {
-		return timestamp;
+	public long getTimestamp1() {
+		return timestamp1;
 	}
 
-	public void setTimestamp(long timestamp) {
-		this.timestamp = timestamp;
+	public void setTimestamp1(long timestamp1) {
+		this.timestamp1 = timestamp1;
 	}
 
 	public static KafkaEvent fromString(String eventStr) {
-		String[] split = eventStr.split(",");
-		return new KafkaEvent(split[0], Integer.valueOf(split[1]), Long.valueOf(split[2]));
+		JSONObject jsonObject = JSONObject.fromObject(eventStr);
+		return new KafkaEvent(jsonObject.getString("word"), jsonObject.getInt("frequency"), jsonObject.getLong("timestamp"));
 	}
 
 	@Override
 	public String toString() {
-		return word + "," + frequency + "," + timestamp;
+		return word + "," + frequency + "," + timestamp1;
 	}
 }

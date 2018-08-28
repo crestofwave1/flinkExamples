@@ -17,11 +17,11 @@
 
 package Streaming.kafka;
 
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
-import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -32,8 +32,15 @@ import org.apache.flink.streaming.api.functions.timestamps.BoundedOutOfOrderness
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
+//import org.apache.flink.table.api.StreamTableEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.api.java.StreamTableEnvironment;
+import org.apache.flink.types.Row;
 
 import javax.annotation.Nullable;
+import java.sql.Timestamp;
+import java.util.Properties;
 
 /**
  * A simple example that shows how to read from and write to Kafka. This will read String messages
@@ -50,40 +57,84 @@ import javax.annotation.Nullable;
 public class Kafka010Example {
 
 	public static void main(String[] args) throws Exception {
-		// parse input arguments
-		final ParameterTool parameterTool = ParameterTool.fromArgs(args);
+//		// parse input arguments
+//		final ParameterTool parameterTool = ParameterTool.fromArgs(args);
+//
+//		if (parameterTool.getNumberOfParameters() < 5) {
+//			System.out.println("Missing parameters!\n" +
+//					"Usage: Kafka --input-topic <topic> --output-topic <topic> " +
+//					"--bootstrap.servers <kafka brokers> " +
+//					"--zookeeper.connect <zk quorum> --group.id <some id>");
+//			return;
+//		}
 
-		if (parameterTool.getNumberOfParameters() < 5) {
-			System.out.println("Missing parameters!\n" +
-					"Usage: Kafka --input-topic <topic> --output-topic <topic> " +
-					"--bootstrap.servers <kafka brokers> " +
-					"--zookeeper.connect <zk quorum> --group.id <some id>");
-			return;
-		}
+		Properties props = new Properties();
+		props.put("bootstrap.servers", "meitudeMacBook-Pro-4.local:9092");
+		props.put("zookeeper.connect","localhost:2181");
+		props.put("group.id","test");
+
+		props.put("metadata.fetch.timeout.ms","10000");
+		props.put("metadata.max.age.ms","30000");
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.getConfig().disableSysoutLogging();
-		env.getConfig().setRestartStrategy(RestartStrategies.fixedDelayRestart(4, 10000));
-		env.enableCheckpointing(5000); // create a checkpoint every 5 seconds
-		env.getConfig().setGlobalJobParameters(parameterTool); // make parameters available in the web interface
+		StreamTableEnvironment tEnv = TableEnvironment.getTableEnvironment(env);
+
+//		env.getConfig().disableSysoutLogging();
+//		env.getConfig().setRestartStrategy(RestartStrategies.fixedDelayRestart(2, 10000));
+//		env.enableCheckpointing(5000); // create a checkpoint every 5 seconds
 		env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
 
 		DataStream<KafkaEvent> input = env
 				.addSource(
-					new FlinkKafkaConsumer010<>(
-						parameterTool.getRequired("input-topic"),
-						new KafkaEventSchema(),
-						parameterTool.getProperties())
-					.assignTimestampsAndWatermarks(new CustomWatermarkExtractor()))
+						new FlinkKafkaConsumer010<>(
+								"foo",
+								new KafkaEventSchema(),
+								props)
+								.assignTimestampsAndWatermarks(new CustomWatermarkExtractor()))
 				.keyBy("word")
 				.map(new RollingAdditionMapper());
+		Table in = tEnv.fromDataStream(input,"timestamp1.rowtime,word,frequency");
+//		tEnv.registerDataStream("wc", input, "timestamp1.rowtime,word,frequency");
+		tEnv.registerTable("wc",in);
+		final String sql = "select frequency,word,timestamp1 \n"
+				+ "  from wc match_recognize \n"
+				+ "  (\n"
+				+ "	   order by  timestamp1 \n"
+				+ "	   measures A.timestamp1 as timestamp1  ,\n"
+				+ "	   A.word as  word ,\n"
+				+ "	   A.frequency as  frequency \n"
+				+ "	   ONE ROW PER MATCH \n"
+				+ "    pattern (A B) \n"
+				+ "    within interval '5' second \n"
+				+ "    define \n"
+				+ "      A AS A.word = 'bob' , \n"
+				+ "      B AS B.word = 'kaka' \n"
+				+ "  ) mr";
+//
+		Table table = tEnv.sqlQuery(sql);
 
-		input.addSink(
-				new FlinkKafkaProducer010<>(
-						parameterTool.getRequired("output-topic"),
-						new KafkaEventSchema(),
-						parameterTool.getProperties()));
+		table.printSchema();
+		tEnv.toAppendStream(table,Row.class).map((MapFunction<Row, KafkaEvent>) value -> {
+//			System.out.println("============= > map");
+			int frequency = (int) value.getField(0);
+			String word = (String) value.getField(1);
+			Timestamp timestamp1 = (Timestamp) value.getField(2);
+			KafkaEvent kafkaEvent = new KafkaEvent();
+			kafkaEvent.setFrequency(frequency);
+			kafkaEvent.setTimestamp1(timestamp1.getTime());
+			kafkaEvent.setWord(word);
+			return kafkaEvent;
+		}).addSink(new FlinkKafkaProducer010<>(
+				"bar",
+				new KafkaEventSchema(),
+				props));
 
+//		input.addSink(
+//				new FlinkKafkaProducer010<>(
+//						"bar",
+//						new KafkaEventSchema(),
+//					props));
+//
 		env.execute("Kafka 0.10 Example");
 	}
 
@@ -108,7 +159,7 @@ public class Kafka010Example {
 
 			currentTotalCount.update(totalCount);
 
-			return new KafkaEvent(event.getWord(), totalCount, event.getTimestamp());
+			return new KafkaEvent(event.getWord(), totalCount, event.getTimestamp1());
 		}
 
 		@Override
@@ -133,8 +184,8 @@ public class Kafka010Example {
 		@Override
 		public long extractTimestamp(KafkaEvent event, long previousElementTimestamp) {
 			// the inputs are assumed to be of format (message,timestamp)
-			this.currentTimestamp = event.getTimestamp();
-			return event.getTimestamp();
+			this.currentTimestamp = event.getTimestamp1();
+			return event.getTimestamp1();
 		}
 
 		@Nullable

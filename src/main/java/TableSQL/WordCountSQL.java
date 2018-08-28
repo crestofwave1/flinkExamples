@@ -44,21 +44,35 @@ public class WordCountSQL {
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		BatchTableEnvironment tEnv = TableEnvironment.getTableEnvironment(env);
 
+
 		DataSet<WC> input = env.fromElements(
-			new WC("Hello", 1),
-			new WC("Ciao", 1),
-			new WC("Hello", 1));
+			new WC("1", 1),
+			new WC("2", 2),
+			new WC("1", 3),
+			new WC("2", 3),
+			new WC("2", 2),
+			new WC("1", 1));
 
 		// register the DataSet as table "WordCount"
-		tEnv.registerDataSet("WordCount", input, "word, frequency");
-
-		// run a SQL query on the Table and retrieve the result as a new Table
-		Table table = tEnv.sqlQuery(
-			"SELECT word, SUM(frequency) as frequency FROM WordCount GROUP BY word");
-
-		DataSet<WC> result = tEnv.toDataSet(table, WC.class);
-
-		result.print();
+		tEnv.registerDataSet("t", input, "word, id");
+		final String sql = "select * \n"
+				+ "  from t match_recognize \n"
+				+ "  (\n"
+				+ "	   measures STRT.word as  start_word ,"
+				+ "    FINAL LAST(A.id) as A_id \n"
+				+ "    pattern (STRT A+) \n"
+				+ "    define \n"
+				+ "      A AS A.word = '1' \n"
+				+ "  ) mr";
+//		 run a SQL query on the Table and retrieve the result as a new Table
+//		Table table = tEnv.sqlQuery(
+//			"SELECT word, SUM(frequency) as frequency FROM WordCount GROUP BY word");
+//		tEnv.sqlUpdate(sql);
+		tEnv.sqlQuery(sql);
+//		table.printSchema();
+//		DataSet<WC> result = tEnv.toDataSet(table, WC.class);
+//
+//		result.print();
 	}
 
 	// *************************************************************************
@@ -70,19 +84,19 @@ public class WordCountSQL {
 	 */
 	public static class WC {
 		public String word;
-		public long frequency;
+		public int id;
 
 		// public constructor to make it a Flink POJO
 		public WC() {}
 
-		public WC(String word, long frequency) {
+		public WC(String word, int frequency) {
 			this.word = word;
-			this.frequency = frequency;
+			this.id = frequency;
 		}
 
 		@Override
 		public String toString() {
-			return "WC " + word + " " + frequency;
+			return "WC " + word + " " + id;
 		}
 	}
 }
